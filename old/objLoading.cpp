@@ -14,68 +14,34 @@ int main() {
 
     const GLchar *vertex120 = R"END(
     #version 120
-    //position
     attribute vec4 inPosition;
-    //color
     attribute vec3 inColor;
-    //normal
-    attribute vec3 inNormal;
-    
-    //time for rotation
+
     uniform float time;
 
-    //surface -> light vector
-    uniform vec3 light;
-
-    //light color
-    uniform vec3 lightColor;
-
-    //diffuse color
-    uniform vec3 diffuseColor;
-
-    //model view projection matrix
     uniform mat4 mvp;
 
-    //distance from surface to light
-    attribute float distance;
-
-    //output color
     varying vec4 outColor;
 
-    //light power
-    uniform float power;
-
     void main() {
-        // float theta = time;
-        // float c = cos(theta);
-        // float s = sin(theta);
-        // mat4 rotationY = mat4(
-        //     c, 0, s, 0,
-        //     0, 1, 0, 0,
-        //     -s, 0, c, 0,
-        //     0, 0, 0, 1
-        // );
-        // mat4 rotationX = mat4(
-        //     1, 0, 0, 0,
-        //     0, c, -s, 0,
-        //     0, s, c, 0,
-        //     0, 0, 0, 1
-        // );
+        float theta = time;
+        float c = cos(theta);
+        float s = sin(theta);
+        mat4 rotationY = mat4(
+            c, 0, s, 0,
+            0, 1, 0, 0,
+            -s, 0, c, 0,
+            0, 0, 0, 1
+        );
+        mat4 rotationX = mat4(
+            1, 0, 0, 0,
+            0, c, -s, 0,
+            0, s, c, 0,
+            0, 0, 0, 1
+        );
 
-        // outColor = vec4(inColor,1);
-        // gl_Position = mvp * rotationX * rotationY * inPosition;
-
-        vec3 ambientColor = lightColor * 0.1;
-
-        vec3 n = normalize(inNormal);
-
-        vec3 l = normalize(light);
-
-        float cosTheta = clamp(dot(n, l), 0, 1);
-
-        outColor = vec4(ambientColor + diffuseColor * inColor * lightColor * power * cosTheta / (distance * distance), 1);
-        gl_Position = mvp * inPosition;
-
+        outColor = vec4(inColor,1);
+        gl_Position = mvp * rotationX * rotationY * inPosition;
     }
     )END";
 
@@ -142,7 +108,7 @@ int main() {
     std::string err;
     std::string warn;
 
-    if(!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "jason.obj")) {
+    if(!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "cube.obj")) {
         std::cout << "Failed to load obj file\n";
         return -1;
     }
@@ -168,16 +134,9 @@ int main() {
         colors[i] = 1;
     }
 
-    // indices
     GLuint indices[shapes[0].mesh.indices.size()];
     for(size_t i = 0; i < shapes[0].mesh.indices.size(); i++) {
         indices[i] = shapes[0].mesh.indices[i].vertex_index;
-    }
-
-    // normals
-    GLfloat normals[attrib.normals.size()];
-    for(size_t i = 0; i < attrib.normals.size(); i++) {
-        normals[i] = attrib.normals[i];
     }
 
     GLuint vao, vbo, cbo;
@@ -203,13 +162,8 @@ int main() {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indicesBuf);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    GLuint normalsBuf;
-    glGenBuffers(1, &normalsBuf);
-    glBindBuffer(GL_ARRAY_BUFFER, normalsBuf);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(normals), normals, GL_STATIC_DRAW);
-
-    glm::mat4 model = glm::mat4(0.5f);
-    glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 10), glm::vec3(0, 0, 0), glm::vec3(0, -1, 0));
+    glm::mat4 model = glm::mat4(1.0f);
+    glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 3), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
     glm::mat4 projection = glm::perspective(glm::radians(240.0f), 1.0f, 0.1f, 100.0f);
     glm::mat4 mvp = projection * view * model;
 
@@ -224,44 +178,11 @@ int main() {
     GLuint attribTime;
     attribTime = glGetUniformLocation(shaderProgram, "time");
 
-    glm::vec3 light = glm::vec3(0, 10, 10);
-
-    GLuint attribLight;
-    attribLight = glGetUniformLocation(shaderProgram, "light");
-    glUniform3f(attribLight, light.x, light.y, light.z);
-
-    GLuint attribLightColor;
-    attribLightColor = glGetUniformLocation(shaderProgram, "lightColor");
-    glUniform3f(attribLightColor, 1, 1, 1);
-    GLuint attribDiffuseColor;
-    attribDiffuseColor = glGetUniformLocation(shaderProgram, "diffuseColor");
-    glUniform3f(attribDiffuseColor, 1, 1, 1);
-
-    GLuint attribDistance;
-    attribDistance = glGetAttribLocation(shaderProgram, "distance");
-    GLfloat distances[attrib.vertices.size()];
-    //calculate distance between each vertex and light
-    for(size_t i = 0; i < attrib.vertices.size(); i+=3) {
-        distances[i/3] = sqrt(pow(attrib.vertices[i] - light.x, 2) + pow(attrib.vertices[i + 1] - light.y, 2) + pow(attrib.vertices[i + 2] - light.z, 2));
-    }
-    GLuint distancesBuf;
-    glGenBuffers(1, &distancesBuf);
-    glBindBuffer(GL_ARRAY_BUFFER, distancesBuf);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(distances), distances, GL_STATIC_DRAW);
-    glVertexAttribPointer(attribDistance, 1, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(attribDistance);
-
-    GLuint attribPower;
-    attribPower = glGetUniformLocation(shaderProgram, "power");
-    glUniform1f(attribPower, 100);
-
     const GLuint nVertices = sizeof(vertices) / sizeof(vertices[0]) / 3;
 
-    glEnable(GL_DEPTH_TEST);
-
     while(!glfwWindowShouldClose(window)) {
-        glClearColor(0, 0, 0, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClearColor(0, 0, 1, 0);
+        glClear(GL_COLOR_BUFFER_BIT);
 
         glUniform1f(attribTime, glfwGetTime());
 
